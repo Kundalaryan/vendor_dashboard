@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react"; // 1. Import useEffect
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,11 +9,10 @@ import { Input } from "../components/Input";
 import { Button } from "../components/Button";
 import { authService } from "../services/authService";
 
-// 1. Validation Schema: EXACTLY 10 digits
 const loginSchema = z.object({
   phone: z
     .string()
-    .length(10, "Phone number must be exactly 10 digits") // Strict length
+    .length(10, "Phone number must be exactly 10 digits")
     .regex(/^\d+$/, "Phone number must contain only numbers"),
   password: z.string().min(1, "Password is required"),
   rememberMe: z.boolean().optional(),
@@ -30,14 +29,31 @@ export default function Login() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-    setValue,
+    setValue, // Used to set field values programmatically
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   });
 
+  // 2. Load Saved Phone Number on Page Load
+  useEffect(() => {
+    const savedPhone = localStorage.getItem("remembered_phone");
+    if (savedPhone) {
+      setValue("phone", savedPhone);
+      setValue("rememberMe", true); // Check the box visually
+    }
+  }, [setValue]);
+
   const onSubmit = async (data: LoginFormValues) => {
     try {
       setServerError(null);
+      
+      // 3. Handle "Remember Me" Logic
+      if (data.rememberMe) {
+        localStorage.setItem("remembered_phone", data.phone);
+      } else {
+        localStorage.removeItem("remembered_phone");
+      }
+
       const response = await authService.login({
         phone: data.phone,
         password: data.password,
@@ -84,14 +100,10 @@ export default function Login() {
             placeholder="Enter your phone number"
             error={errors.phone?.message}
             {...register("phone", {
-              // STRICT INPUT CONTROL
               onChange: (e) => {
-                // 1. Remove non-digits
-                // 2. Cut off anything after the 10th digit
                 const value = e.target.value.replace(/\D/g, "").slice(0, 10);
-                
-                setValue("phone", value); // Update internal state
-                e.target.value = value;   // Update visual input
+                setValue("phone", value);
+                e.target.value = value;
               },
             })}
           />
