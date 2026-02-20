@@ -25,5 +25,13 @@ export const orderService = {
   updateAvailability: async (active: boolean) => {
     const response = await api.put<CanteenAvailability>('/vendor/canteen/availability', { active });
     return response.data;
-  }
+  },
+  markAsPreparing: async (orderId: number) => {
+    const response = await api.post(`/vendor/canteen/orders/${orderId}/preparing`);
+    return response.data;
+  },
+  markAsReady: async (orderId: number) => {
+    const response = await api.post(`/vendor/canteen/orders/${orderId}/ready`);
+    return response.data;
+  },
 };

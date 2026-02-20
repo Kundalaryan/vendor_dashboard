@@ -1,4 +1,13 @@
-export type OrderStatus = "NEW" | "COOKING" | "READY" | "COMPLETED" | "REJECTED" | "CANCELLED";
+// Updated Status Cycle
+export type OrderStatus = 
+  | "ORDER_PLACED" 
+  | "ACCEPTED" 
+  | "PREPARING" 
+  | "READY" 
+  | "COMPLETED" 
+  | "REJECTED" 
+  | "CANCELLED"
+  | "EXPIRED";
 
 export interface OrderItem {
   name: string;
@@ -7,15 +16,14 @@ export interface OrderItem {
 
 export interface Order {
   orderId: number;
-  createdAt: string; // ISO Date string
-  fulfilmentType: "DELIVERY" | "TAKEAWAY";
+  createdAt: string;
+  fulfilmentType: "DELIVERY" | "PICKUP" | "DINE_IN";
   customerPhone: string;
+  customerName: string | null; // Added
   instructions: string | null;
   totalAmount: number;
   paymentStatus: "PENDING" | "PAID";
-  // Some endpoints (like /orders/live) may not yet send status.
-  // In that case we treat it as "NEW" on the frontend.
-  status?: OrderStatus;
+  orderStatus: OrderStatus; // Renamed from status to orderStatus based on your JSON
   items: OrderItem[];
 }
 

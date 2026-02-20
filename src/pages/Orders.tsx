@@ -9,25 +9,25 @@ import type { OrderStatus } from "../types/order";
 
 export default function Orders() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<OrderStatus>("NEW");
   
-  // State for Rejection Modal
+  // Default to the first stage of your cycle
+  const [activeTab, setActiveTab] = useState<OrderStatus>("ORDER_PLACED");
+  
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [isAccepting, setIsAccepting] = useState(true);
 
-  // 1. POLLING: Fetch orders every 5 seconds
+  // 1. Fetch
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: orderService.getOrders,
-    refetchInterval: 5000, // Poll every 5s
+    refetchInterval: 5000, 
   });
 
-  // 2. Mutations (Actions)
+  // 2. Mutations
   const acceptMutation = useMutation({
     mutationFn: (id: number) => orderService.acceptOrder(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orders"] }); // Refresh list instantly
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
   });
 
   const rejectMutation = useMutation({
@@ -40,10 +40,57 @@ export default function Orders() {
     },
   });
 
+  // 2.a Mark as Preparing
+  const preparingMutation = useMutation({
+    mutationFn: (id: number) => orderService.markAsPreparing(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      // Optional: switch tab to "PREPARING" if desired
+    },
+  });
+
+  // 2.b Mark as Ready
+  const readyMutation = useMutation({
+    mutationFn: (id: number) => orderService.markAsReady(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
   const availabilityMutation = useMutation({
     mutationFn: (active: boolean) => orderService.updateAvailability(active),
-    // You might want to store availability state in a separate query or context
   });
+
+  // Only show orders that are paid and not expired
+  const visibleOrders = orders.filter(
+    (o) => o.paymentStatus === "PAID" && o.orderStatus !== "EXPIRED"
+  );
+
+  // 3. Define Tabs based on your cycle
+  const tabs: { label: string; value: OrderStatus; count: number }[] = [
+    { 
+      label: "New Orders", 
+      value: "ORDER_PLACED", 
+      count: visibleOrders.filter(o => o.orderStatus === "ORDER_PLACED").length 
+    },
+    { 
+      label: "Accepted", 
+      value: "ACCEPTED", 
+      count: visibleOrders.filter(o => o.orderStatus === "ACCEPTED").length 
+    },
+    { 
+      label: "Preparing", 
+      value: "PREPARING", 
+      count: visibleOrders.filter(o => o.orderStatus === "PREPARING").length 
+    },
+    { 
+      label: "Ready", 
+      value: "READY", 
+      count: visibleOrders.filter(o => o.orderStatus === "READY").length 
+    },
+  ];
+
+  // 4. Filter Logic
+  const filteredOrders = visibleOrders.filter((o) => o.orderStatus === activeTab);
 
   const handleRejectSubmit = () => {
     if (rejectId && rejectReason) {
@@ -51,67 +98,49 @@ export default function Orders() {
     }
   };
 
-  // Filter orders by tab
-  const filteredOrders = orders.filter((o) => {
-    const status = o.status ?? "NEW"; // default for live orders without status
-    if (activeTab === "NEW") return status === "NEW";
-    if (activeTab === "COOKING") return status === "COOKING";
-    if (activeTab === "READY") return status === "READY";
-    if (activeTab === "COMPLETED") return status === "COMPLETED";
-    return false;
-  });
-
-  const tabs: { label: string; value: OrderStatus; count: number }[] = [
-    { label: "New Orders", value: "NEW", count: orders.filter(o => (o.status ?? "NEW") === "NEW").length },
-    { label: "In Kitchen", value: "COOKING", count: orders.filter(o => o.status === "COOKING").length },
-    { label: "Ready for Pickup", value: "READY", count: orders.filter(o => o.status === "READY").length },
-    { label: "Completed", value: "COMPLETED", count: 0 }, // Optional to show count
-  ];
-
-  const [isAccepting, setIsAccepting] = useState(true); // Should fetch this from backend ideally
-
   return (
     <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-100px)]">
         
-        {/* Top Controls */}
+        {/* Header Control */}
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">Live Orders</h1>
-            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-bold tracking-wide">
-              OPEN
-            </span>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-gray-900">Live Orders</h1>
+              <div className={`px-2.5 py-0.5 rounded text-xs font-bold tracking-wide uppercase ${isAccepting ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                {isAccepting ? "Store Open" : "Store Closed"}
+              </div>
+            </div>
+            <p className="text-gray-500 text-sm mt-1">Manage incoming orders and track their status.</p>
           </div>
 
-          <div className="flex items-center gap-4">
-             {/* Availability Toggle */}
-            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm">
-              <span className="text-sm font-medium text-gray-700">Accepting Orders</span>
-              <button 
-                onClick={() => {
-                  setIsAccepting(!isAccepting);
-                  availabilityMutation.mutate(!isAccepting);
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isAccepting ? "bg-green-500" : "bg-gray-300"
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isAccepting ? "translate-x-6" : "translate-x-1"
-                }`} />
-              </button>
-            </div>
+          {/* Availability Toggle */}
+          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <span className="text-sm font-medium text-gray-700">Accepting Orders</span>
+            <button 
+              onClick={() => {
+                setIsAccepting(!isAccepting);
+                availabilityMutation.mutate(!isAccepting);
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                isAccepting ? "bg-green-500" : "bg-gray-300"
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                isAccepting ? "translate-x-6" : "translate-x-1"
+              }`} />
+            </button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white border-b border-gray-200 px-4 pt-2 mb-6 sticky top-16 z-10 rounded-t-xl">
-          <div className="flex gap-8 overflow-x-auto">
+        {/* Filter Tabs */}
+        <div className="bg-white border-b border-gray-200 px-2 mb-6 sticky top-16 z-10 rounded-t-xl">
+          <div className="flex gap-6 overflow-x-auto no-scrollbar">
             {tabs.map((tab) => (
               <button
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
-                className={`pb-4 px-2 text-sm font-medium whitespace-nowrap transition-all border-b-2 flex items-center gap-2 ${
+                className={`pb-3 pt-2 px-2 text-sm font-medium whitespace-nowrap transition-all border-b-2 flex items-center gap-2 ${
                   activeTab === tab.value
                     ? "border-blue-600 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700"
@@ -130,26 +159,36 @@ export default function Orders() {
           </div>
         </div>
 
-        {/* Orders Grid */}
-        <div className="flex-1 overflow-y-auto pb-10">
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto pb-10 pr-2">
           {isLoading ? (
-            <div className="flex items-center justify-center h-40 text-gray-400">Loading orders...</div>
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
           ) : filteredOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <Search size={24} />
+              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4 border border-gray-100">
+                <Search size={24} className="opacity-50" />
               </div>
-              <p>No orders in this category</p>
+              <p className="font-medium text-gray-600">No orders found</p>
+              <p className="text-sm">There are no orders in the {activeTab.toLowerCase().replace('_', ' ')} stage.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {filteredOrders.map((order) => (
                 <OrderCard
                   key={order.orderId}
                   order={order}
-                  isProcessing={acceptMutation.isPending || rejectMutation.isPending}
+                  isProcessing={
+                    acceptMutation.isPending ||
+                    rejectMutation.isPending ||
+                    preparingMutation.isPending ||
+                    readyMutation.isPending
+                  }
                   onAccept={(id) => acceptMutation.mutate(id)}
                   onReject={(id) => setRejectId(id)}
+                  onPrepare={(id) => preparingMutation.mutate(id)}
+                  onReady={(id) => readyMutation.mutate(id)}
                 />
               ))}
             </div>
@@ -159,29 +198,31 @@ export default function Orders() {
 
       {/* Reject Reason Modal */}
       {rejectId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Reject Order</h3>
-            <p className="text-sm text-gray-500 mb-4">Please specify a reason for rejecting this order.</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm" onClick={() => setRejectId(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Reject Order #{rejectId}</h3>
+            <p className="text-sm text-gray-500 mb-4">Please specify a reason for rejection. This will be sent to the customer.</p>
             
             <textarea
               className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-100 focus:border-red-500 outline-none resize-none h-24"
-              placeholder="e.g. Item out of stock, Closing soon..."
+              placeholder="e.g. Item out of stock..."
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
+              autoFocus
             />
 
             <div className="flex gap-3 mt-6">
               <button 
                 onClick={() => setRejectId(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button 
                 onClick={handleRejectSubmit}
                 disabled={!rejectReason}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors shadow-sm shadow-red-200"
               >
                 Reject Order
               </button>
