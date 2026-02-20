@@ -46,27 +46,35 @@ export default function Login() {
   const onSubmit = async (data: LoginFormValues) => {
     try {
       setServerError(null);
-      
-      // 3. Handle "Remember Me" Logic
+
+      // Handle "Remember Me" logic
       if (data.rememberMe) {
         localStorage.setItem("remembered_phone", data.phone);
       } else {
         localStorage.removeItem("remembered_phone");
       }
 
-      const response = await authService.login({
+      // 1. Perform Login
+      const loginResponse = await authService.login({
         phone: data.phone,
         password: data.password,
       });
 
-      localStorage.setItem("vendor_token", response.token);
-      localStorage.setItem("vendor_info", JSON.stringify({
-        id: response.vendorId,
-        name: response.name,
-        type: response.serviceType
-      }));
+      // 2. Save Token
+      localStorage.setItem("vendor_token", loginResponse.token);
 
-      navigate("/dashboard");
+      // 3. Fetch profile to check status
+      const profile = await authService.getMe();
+
+      // 4. Save basic info
+      localStorage.setItem("vendor_info", JSON.stringify(profile));
+
+      // 5. Decide where to go
+      if (profile.onboarded) {
+        navigate("/dashboard");
+      } else {
+        navigate("/onboarding");
+      }
     } catch (error: any) {
       console.error("Login Failed", error);
       setServerError(error.response?.data?.message || "Invalid credentials.");

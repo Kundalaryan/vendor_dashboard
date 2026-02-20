@@ -19,12 +19,16 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Add a response interceptor to handle global errors (like 401 Unauthorized)
+// Add a response interceptor to handle global auth errors (like 401/403)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+
+    // If token is invalid/expired or access is forbidden, force re-login
+    if (status === 401 || status === 403) {
       localStorage.removeItem('vendor_token');
+      localStorage.removeItem('vendor_info');
       window.location.href = '/login';
     }
     return Promise.reject(error);
