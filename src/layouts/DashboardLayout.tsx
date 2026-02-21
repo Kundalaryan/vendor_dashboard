@@ -1,6 +1,7 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Store, Bell, Settings, Search } from "lucide-react";
+import { PrintManager } from "../features/print/PrintManager";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -53,6 +54,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Actions & Profile */}
           <div className="flex items-center gap-3">
+            {/* Print pending orders */}
+            <PrintManager />
             <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors relative">
               <Bell className="w-5 h-5" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
