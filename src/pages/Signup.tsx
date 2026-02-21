@@ -10,6 +10,8 @@ import { Select } from "../components/Select";
 import { Button } from "../components/Button";
 import { authService } from "../services/authService";
 
+const BUSINESS_CATEGORY_OPTIONS = [{ label: "Canteen", value: "CANTEEN" }];
+
 // 1. Validation Schema: EXACTLY 10 digits
 const signupSchema = z.object({
   name: z.string().min(3, "Business name must be at least 3 characters"),
@@ -96,9 +98,7 @@ export default function Signup() {
 
           <Select
             label="Business Category"
-            options={[
-              { label: "Canteen", value: "CANTEEN" },
-            ]}
+            options={BUSINESS_CATEGORY_OPTIONS}
             {...register("serviceType")}
             error={errors.serviceType?.message}
           />
