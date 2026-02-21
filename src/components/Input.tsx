@@ -1,4 +1,4 @@
-import React, { forwardRef } from "react";
+import React, { forwardRef, useId } from "react";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -8,14 +8,19 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, icon, className = "", ...props }, ref) => {
+    const id = useId();
+
     return (
       <div className="w-full space-y-1.5">
-        <label className="block text-sm font-medium text-gray-700">
+        <label htmlFor={id} className="block text-sm font-medium text-gray-700">
           {label}
         </label>
         <div className="relative">
           <input
             ref={ref}
+            id={id}
+            aria-invalid={!!error}
+            aria-describedby={error ? `${id}-error` : undefined}
             className={`w-full px-3 py-2.5 border rounded-lg outline-none transition-all duration-200 text-sm ${
               error 
                 ? "border-red-500 focus:ring-2 focus:ring-red-100" 
@@ -29,7 +34,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
         </div>
-        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+        {error && (
+          <p id={`${id}-error`} role="alert" className="text-xs text-red-500 mt-1">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
