@@ -21,7 +21,12 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   return (
-    <button className={`${baseStyles} ${variants[variant]} ${className}`} disabled={isLoading} {...props}>
+    <button
+      className={`${baseStyles} ${variants[variant]} ${className}`}
+      disabled={isLoading}
+      aria-busy={isLoading}
+      {...props}
+    >
       {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
       {children}
     </button>
