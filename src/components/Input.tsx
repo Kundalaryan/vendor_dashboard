@@ -10,6 +10,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, icon, className = "", id, ...props }, ref) => {
     const generatedId = useId();
     const inputId = id || generatedId;
+    const errorId = `${inputId}-error`;
 
     return (
       <div className="w-full space-y-1.5">
@@ -20,9 +21,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             id={inputId}
             ref={ref}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
             className={`w-full px-3 py-2.5 border rounded-lg outline-none transition-all duration-200 text-sm ${
-              error 
-                ? "border-red-500 focus:ring-2 focus:ring-red-100" 
+              error
+                ? "border-red-500 focus:ring-2 focus:ring-red-100"
                 : "border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-50 placeholder:text-gray-400"
             } ${className}`}
             {...props}
@@ -33,7 +36,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             </div>
           )}
         </div>
-        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+        {error && (
+          <p id={errorId} role="alert" className="text-xs text-red-500 mt-1">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
