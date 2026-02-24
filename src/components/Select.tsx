@@ -10,6 +10,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, options, className = "", id, ...props }, ref) => {
     const generatedId = useId();
     const selectId = id || generatedId;
+    const errorId = `${selectId}-error`;
 
     return (
       <div className="w-full space-y-1.5">
@@ -20,6 +21,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <select
             id={selectId}
             ref={ref}
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
             className={`w-full px-3 py-2.5 border rounded-lg outline-none transition-all duration-200 text-sm bg-white appearance-none ${
               error
                 ? "border-red-500 focus:ring-2 focus:ring-red-100"
@@ -40,7 +43,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </svg>
           </div>
         </div>
-        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+        {error && (
+          <p id={errorId} role="alert" className="text-xs text-red-500 mt-1">
+            {error}
+          </p>
+        )}
       </div>
     );
   }
