@@ -10,9 +10,8 @@ type ApiResponse<T> = {
 export const analyticsService = {
   getCanteenAnalytics: async () => {
     const response = await api.get<ApiResponse<CanteenAnalytics>>(
-      "/vendor/analytics/canteen"
+      "/vendor/reports/canteen"
     );
     return response.data.data;
   },
 };
-
