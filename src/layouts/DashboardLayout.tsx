@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Utensils, Search, User, LogOut, ChevronDown, ImageUp, Loader2 } from "lucide-react";
+import { Utensils, Search, User, LogOut, ChevronDown, ImageUp, Loader2, BellRing } from "lucide-react";
 import { PrintManager } from "../features/print/PrintManager";
 import { authService } from "../services/authService";
+import { orderService } from "../services/orderService";
+import type { Order } from "../types/order";
 
 const DEFAULT_CROP_WIDTH = 800;
 const DEFAULT_CROP_HEIGHT = 450;
@@ -105,10 +107,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [outputHeight, setOutputHeight] = useState(DEFAULT_CROP_HEIGHT);
   const [focusX, setFocusX] = useState(0);
   const [focusY, setFocusY] = useState(0);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const previousPendingCountRef = useRef(0);
+  const pendingCountInitializedRef = useRef(false);
   const { data: profile } = useQuery({
     queryKey: ["vendor-profile"],
     queryFn: authService.getMe,
+  });
+  const { data: orders = [] } = useQuery<Order[]>({
+    queryKey: ["orders"],
+    queryFn: orderService.getOrders,
+    refetchInterval: 5000,
   });
   const navItems = [
     { name: "Dashboard", path: "/dashboard" },
@@ -116,6 +127,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: "Menu", path: "/menu" },
   ];
   const outletImageUrl = profile?.outletImageUrl || profile?.outletImage || profile?.imageUrl || null;
+  const pendingOrderCount = orders.filter(
+    (order) => order.paymentStatus === "PAID" && order.orderStatus === "ORDER_PLACED"
+  ).length;
+  const showOrdersDot = pendingOrderCount > 0 && location.pathname !== "/orders";
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
@@ -129,12 +144,80 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   useEffect(() => {
+    const markInteracted = () => {
+      setHasInteracted(true);
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) {
+          return;
+        }
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioCtx();
+        }
+        void audioContextRef.current.resume();
+      } catch {
+        // no-op
+      }
+    };
+
+    window.addEventListener("pointerdown", markInteracted, { once: true });
+    window.addEventListener("keydown", markInteracted, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", markInteracted);
+      window.removeEventListener("keydown", markInteracted);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingCountInitializedRef.current) {
+      previousPendingCountRef.current = pendingOrderCount;
+      pendingCountInitializedRef.current = true;
+      return;
+    }
+
+    const previousCount = previousPendingCountRef.current;
+    if (
+      hasInteracted &&
+      pendingOrderCount > previousCount &&
+      location.pathname !== "/orders"
+    ) {
+      void playOrderAlertSound();
+    }
+
+    previousPendingCountRef.current = pendingOrderCount;
+  }, [hasInteracted, pendingOrderCount, location.pathname]);
+
+  useEffect(() => {
+    if (!hasInteracted || pendingOrderCount <= 0) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void playOrderAlertSound();
+    }, 3 * 60 * 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [hasInteracted, pendingOrderCount]);
+
+  useEffect(() => {
     return () => {
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
       }
     };
   }, [previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {
+          // no-op
+        });
+      }
+    };
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("vendor_token");
@@ -220,6 +303,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   };
 
+  const playOrderAlertSound = async () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) {
+        return;
+      }
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioCtx();
+      }
+
+      const context = audioContextRef.current;
+      if (context.state !== "running") {
+        await context.resume();
+      }
+
+      const now = context.currentTime;
+      const totalPulses = 6;
+      const pulseDuration = 0.22;
+      const pulseGap = 0.12;
+
+      for (let i = 0; i < totalPulses; i += 1) {
+        const start = now + i * (pulseDuration + pulseGap);
+        const end = start + pulseDuration;
+        const gainNode = context.createGain();
+        gainNode.gain.setValueAtTime(0.0001, start);
+        gainNode.gain.exponentialRampToValueAtTime(0.22, start + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, end);
+        gainNode.connect(context.destination);
+
+        const osc = context.createOscillator();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(i % 2 === 0 ? 820 : 980, start);
+        osc.connect(gainNode);
+        osc.start(start);
+        osc.stop(end);
+      }
+    } catch {
+      // Audio can fail due to browser autoplay/user policies.
+    }
+  };
+
   const previewPosition = `${(focusX + 100) / 2}% ${(focusY + 100) / 2}%`;
 
   return (
@@ -259,7 +383,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                 }`}
               >
-                {item.name}
+                <span className="inline-flex items-center gap-2">
+                  {item.name}
+                  {item.path === "/orders" && showOrdersDot && (
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+                    </span>
+                  )}
+                </span>
               </Link>
             ))}
           </nav>
@@ -417,6 +549,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <p className="mt-2 text-[11px] text-gray-500">
                     Upload limit: source under 12MB, optimized upload under 900KB.
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHasInteracted(true);
+                      void playOrderAlertSound();
+                    }}
+                    className="mt-2 w-full inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-amber-700 border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors"
+                  >
+                    <BellRing size={14} />
+                    Test Alert Sound
+                  </button>
                   {profileImageError && (
                     <p className="mt-2 text-xs text-red-600">{profileImageError}</p>
                   )}
