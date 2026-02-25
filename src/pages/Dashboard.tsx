@@ -30,14 +30,39 @@ const formatCurrency = (value: number) =>
   })}`;
 
 const formatShortDate = (date: string) => {
-  const d = new Date(date);
+  const normalized = normalizeApiDateKey(date);
+  const [year, month, day] = normalized.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+};
+
+const toLocalDateInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const normalizeApiDateKey = (date: string) => {
+  const isoDateMatch = date.match(/^\d{4}-\d{2}-\d{2}/);
+  if (isoDateMatch) {
+    return isoDateMatch[0];
+  }
+  return toLocalDateInput(new Date(date));
+};
+
+const formatDateInput = (date: string) => normalizeApiDateKey(date);
+
+const calculatePercentChange = (current: number, previous: number) => {
+  if (!previous) return current > 0 ? 100 : 0;
+  return ((current - previous) / Math.abs(previous)) * 100;
 };
 
 export default function Dashboard() {
   // Chart Toggle State
   const [chartMetric, setChartMetric] = useState<"orders" | "revenue">("orders");
   const [isAccepting, setIsAccepting] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string>(toLocalDateInput(new Date()));
 
   const { data, isLoading } = useQuery<CanteenAnalytics>({
     queryKey: ["canteen-analytics"],
@@ -50,51 +75,100 @@ export default function Dashboard() {
 
   const today = data?.today;
   const yesterday = data?.yesterday;
+  const todayDate = toLocalDateInput(new Date());
+  const minLocalSelectableDate = toLocalDateInput(
+    new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
+  );
+  const lastSevenDays = data?.sevenDayTrend
+    ? [...data.sevenDayTrend]
+        .sort((a, b) => normalizeApiDateKey(a.date).localeCompare(normalizeApiDateKey(b.date)))
+        .slice(-7)
+    : [];
+  const earliestTrendDate = lastSevenDays[0] ? formatDateInput(lastSevenDays[0].date) : null;
+  const latestTrendDate = lastSevenDays[lastSevenDays.length - 1]
+    ? formatDateInput(lastSevenDays[lastSevenDays.length - 1].date)
+    : null;
+  const minSelectableDate = earliestTrendDate && earliestTrendDate < minLocalSelectableDate
+    ? earliestTrendDate
+    : minLocalSelectableDate;
+  const maxSelectableDate = latestTrendDate && latestTrendDate > todayDate
+    ? latestTrendDate
+    : todayDate;
+  const selectedSnapshot =
+    lastSevenDays.find((day) => formatDateInput(day.date) === selectedDate) ||
+    (today && formatDateInput(today.date) === selectedDate ? today : null);
+  const todaySnapshotKey = today ? formatDateInput(today.date) : null;
+  const selectedSnapshotDate = selectedSnapshot ? formatDateInput(selectedSnapshot.date) : null;
+  const selectedIndex = selectedSnapshotDate
+    ? lastSevenDays.findIndex((day) => formatDateInput(day.date) === selectedSnapshotDate)
+    : -1;
+  const previousSnapshot =
+    selectedIndex > 0
+      ? lastSevenDays[selectedIndex - 1]
+      : selectedSnapshotDate === todaySnapshotKey ? yesterday : null;
+  const ordersChangePercent = selectedSnapshot
+    ? calculatePercentChange(
+        selectedSnapshot.totalOrders,
+        previousSnapshot?.totalOrders ?? 0
+      )
+    : 0;
+  const revenueChangePercent = selectedSnapshot
+    ? calculatePercentChange(
+        selectedSnapshot.netRevenue,
+        previousSnapshot?.netRevenue ?? 0
+      )
+    : 0;
 
   // Prepare Chart Data
   const trendData =
-    data?.sevenDayTrend.map((d) => ({
+    lastSevenDays.map((d) => ({
       date: formatShortDate(d.date),
       value: chartMetric === "orders" ? d.totalOrders : d.netRevenue,
     })) ?? [];
 
   // --- KPI Configuration ---
   const kpiCards =
-    today && yesterday
+    selectedSnapshot
       ? [
           {
             label: "Total Orders",
-            value: today.totalOrders.toString(),
-            delta: data?.ordersChangePercent ?? 0,
-            subLabel: `Yesterday: ${yesterday.totalOrders}`,
+            value: selectedSnapshot.totalOrders.toString(),
+            delta: ordersChangePercent,
+            subLabel: previousSnapshot
+              ? `Previous Day: ${previousSnapshot.totalOrders}`
+              : "Previous Day: —",
           },
           {
             label: "Net Revenue",
-            value: formatCurrency(today.netRevenue),
-            delta: data?.revenueChangePercent ?? 0,
-            subLabel: `Yesterday: ${formatCurrency(yesterday.netRevenue)}`,
+            value: formatCurrency(selectedSnapshot.netRevenue),
+            delta: revenueChangePercent,
+            subLabel: previousSnapshot
+              ? `Previous Day: ${formatCurrency(previousSnapshot.netRevenue)}`
+              : "Previous Day: —",
           },
           {
             label: "Avg Order Value",
-            value: formatCurrency(today.averageOrderValue),
+            value: formatCurrency(selectedSnapshot.averageOrderValue),
             delta:
-              today.averageOrderValue && yesterday.averageOrderValue
-                ? ((today.averageOrderValue - yesterday.averageOrderValue) /
-                    Math.max(yesterday.averageOrderValue, 1)) *
+              selectedSnapshot.averageOrderValue && previousSnapshot?.averageOrderValue
+                ? ((selectedSnapshot.averageOrderValue - previousSnapshot.averageOrderValue) /
+                    Math.max(previousSnapshot.averageOrderValue, 1)) *
                   100
                 : 0,
-            subLabel: `Yesterday: ${formatCurrency(yesterday.averageOrderValue)}`,
+            subLabel: previousSnapshot
+              ? `Previous Day: ${formatCurrency(previousSnapshot.averageOrderValue)}`
+              : "Previous Day: —",
           },
           {
             label: "Completion Rate",
             value:
-              today.totalOrders > 0
+              selectedSnapshot.totalOrders > 0
                 ? `${Math.round(
-                    (today.completedOrders / today.totalOrders) * 100
+                    (selectedSnapshot.completedOrders / selectedSnapshot.totalOrders) * 100
                   )}%`
                 : "—",
             delta: 0, // Assuming 0 for now as strict delta wasn't provided
-            subLabel: `Completed: ${today.completedOrders}`,
+            subLabel: `Completed: ${selectedSnapshot.completedOrders}`,
           },
         ]
       : [];
@@ -115,33 +189,62 @@ export default function Dashboard() {
             </div>
           </div>
           <p className="text-gray-500 text-sm mt-1">
-            Today vs yesterday KPIs and a 7‑day trend for your outlet.
+            Pick any of the last 7 days to view quality insights and trend data.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
-          <span className="text-sm font-medium text-gray-700">Accepting Orders</span>
-          <button
-            onClick={() => {
-              const nextState = !isAccepting;
-              setIsAccepting(nextState);
-              availabilityMutation.mutate(nextState, {
-                onError: () => {
-                  setIsAccepting(!nextState);
-                },
-              });
-            }}
-            disabled={availabilityMutation.isPending}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-              isAccepting ? "bg-green-500" : "bg-gray-300"
-            } ${availabilityMutation.isPending ? "opacity-70 cursor-not-allowed" : ""}`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                isAccepting ? "translate-x-6" : "translate-x-1"
-              }`}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <label htmlFor="dashboard-date" className="text-xs font-semibold text-gray-600 uppercase">
+              Date
+            </label>
+            <input
+              id="dashboard-date"
+              type="date"
+              value={selectedDate}
+              min={minSelectableDate}
+              max={maxSelectableDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-50 focus:border-blue-500"
             />
-          </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDate(toLocalDateInput(new Date()))}
+              className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Reset
+            </button>
+          </div>
+          {!isLoading && !selectedSnapshot && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+              No analytics data available for {selectedDate}.
+            </p>
+          )}
+
+          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
+            <span className="text-sm font-medium text-gray-700">Accepting Orders</span>
+            <button
+              onClick={() => {
+                const nextState = !isAccepting;
+                setIsAccepting(nextState);
+                availabilityMutation.mutate(nextState, {
+                  onError: () => {
+                    setIsAccepting(!nextState);
+                  },
+                });
+              }}
+              disabled={availabilityMutation.isPending}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                isAccepting ? "bg-green-500" : "bg-gray-300"
+              } ${availabilityMutation.isPending ? "opacity-70 cursor-not-allowed" : ""}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  isAccepting ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -190,7 +293,7 @@ export default function Dashboard() {
             {/* Order Outcomes */}
             <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
               <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-6">
-                Order Outcomes (Today)
+                Order Outcomes ({selectedSnapshot ? formatShortDate(selectedSnapshot.date) : "Selected Day"})
               </h3>
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
@@ -198,21 +301,21 @@ export default function Dashboard() {
                     <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
                     <span className="text-sm font-medium text-gray-700">Completed</span>
                   </div>
-                  <span className="font-bold text-green-600">{today?.completedOrders ?? 0}</span>
+                  <span className="font-bold text-green-600">{selectedSnapshot?.completedOrders ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
                     <span className="text-sm font-medium text-gray-700">Cancelled</span>
                   </div>
-                  <span className="font-bold text-amber-600">{today?.cancelledOrders ?? 0}</span>
+                  <span className="font-bold text-amber-600">{selectedSnapshot?.cancelledOrders ?? 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
                     <span className="text-sm font-medium text-gray-700">Rejected</span>
                   </div>
-                  <span className="font-bold text-red-600">{today?.rejectedOrders ?? 0}</span>
+                  <span className="font-bold text-red-600">{selectedSnapshot?.rejectedOrders ?? 0}</span>
                 </div>
               </div>
             </div>
@@ -221,26 +324,26 @@ export default function Dashboard() {
             <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-                  Yesterday Snapshot
+                  Previous Day Snapshot
                 </h3>
                 <span className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-medium rounded">
-                  {yesterday ? formatShortDate(yesterday.date) : "—"}
+                  {previousSnapshot ? formatShortDate(previousSnapshot.date) : "—"}
                 </span>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">Total Orders</p>
-                  <p className="text-xl font-bold text-gray-900">{yesterday?.totalOrders ?? 0}</p>
+                  <p className="text-xl font-bold text-gray-900">{previousSnapshot?.totalOrders ?? 0}</p>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-xs text-gray-500 mb-1">Completed</p>
-                  <p className="text-xl font-bold text-gray-900">{yesterday?.completedOrders ?? 0}</p>
+                  <p className="text-xl font-bold text-gray-900">{previousSnapshot?.completedOrders ?? 0}</p>
                 </div>
                 <div className="col-span-2 bg-blue-50 p-4 rounded-lg flex justify-between items-center">
                   <p className="text-xs font-medium text-blue-700">Net Revenue</p>
                   <p className="text-xl font-bold text-blue-700">
-                    {yesterday ? formatCurrency(yesterday.netRevenue) : "—"}
+                    {previousSnapshot ? formatCurrency(previousSnapshot.netRevenue) : "—"}
                   </p>
                 </div>
               </div>
@@ -340,30 +443,31 @@ export default function Dashboard() {
           
           {/* 1. Today at a Glance (Blue Card) */}
           <div className="bg-blue-900 p-6 rounded-xl shadow-md text-white">
-            <h2 className="text-lg font-bold mb-3">Today at a Glance</h2>
+            <h2 className="text-lg font-bold mb-3">Selected Day Insights</h2>
             <p className="text-blue-100 text-sm leading-relaxed mb-6">
-              You've processed <span className="font-bold text-white">{today?.totalOrders ?? 0}</span> orders today 
-              ({(data?.ordersChangePercent ?? 0) >= 0 ? "up" : "down"} {Math.abs(data?.ordersChangePercent ?? 0).toFixed(1)}% vs yesterday) 
-              with a net revenue of <span className="font-bold text-white">{formatCurrency(today?.netRevenue ?? 0)}</span>.
+              For <span className="font-bold text-white">{selectedSnapshot ? formatShortDate(selectedSnapshot.date) : "selected day"}</span>, you've processed{" "}
+              <span className="font-bold text-white">{selectedSnapshot?.totalOrders ?? 0}</span> orders 
+              ({ordersChangePercent >= 0 ? "up" : "down"} {Math.abs(ordersChangePercent).toFixed(1)}% vs previous day) 
+              with a net revenue of <span className="font-bold text-white">{formatCurrency(selectedSnapshot?.netRevenue ?? 0)}</span>.
             </p>
 
             <div className="space-y-4">
               <div className="flex justify-between items-center border-b border-blue-800 pb-3">
                 <span className="text-xs text-blue-200">Order window</span>
-                <span className="text-sm font-medium">{today ? formatShortDate(today.date) : "-"}</span>
+                <span className="text-sm font-medium">{selectedSnapshot ? formatShortDate(selectedSnapshot.date) : "-"}</span>
               </div>
               <div className="flex justify-between items-center border-b border-blue-800 pb-3">
                 <span className="text-xs text-blue-200">Revenue change</span>
-                <span className={`text-sm font-medium ${(data?.revenueChangePercent ?? 0) >= 0 ? "text-green-300" : "text-red-300"}`}>
-                  {(data?.revenueChangePercent ?? 0) > 0 ? "+" : ""}
-                  {data?.revenueChangePercent.toFixed(1)}%
+                <span className={`text-sm font-medium ${revenueChangePercent >= 0 ? "text-green-300" : "text-red-300"}`}>
+                  {revenueChangePercent > 0 ? "+" : ""}
+                  {revenueChangePercent.toFixed(1)}%
                 </span>
               </div>
               <div className="flex justify-between items-center pb-1">
                 <span className="text-xs text-blue-200">Orders change</span>
-                <span className={`text-sm font-medium ${(data?.ordersChangePercent ?? 0) >= 0 ? "text-green-300" : "text-red-300"}`}>
-                   {(data?.ordersChangePercent ?? 0) > 0 ? "+" : ""}
-                   {data?.ordersChangePercent.toFixed(1)}%
+                <span className={`text-sm font-medium ${ordersChangePercent >= 0 ? "text-green-300" : "text-red-300"}`}>
+                   {ordersChangePercent > 0 ? "+" : ""}
+                   {ordersChangePercent.toFixed(1)}%
                 </span>
               </div>
             </div>
@@ -382,7 +486,7 @@ export default function Dashboard() {
                   </div>
                   <span className="text-sm text-gray-700 font-medium">Gross Revenue</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.totalRevenue ?? 0)}</span>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(selectedSnapshot?.totalRevenue ?? 0)}</span>
               </div>
 
               <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -395,7 +499,7 @@ export default function Dashboard() {
                      <span className="text-[10px] text-green-600">Target Reached</span>
                   </div>
                 </div>
-                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.netRevenue ?? 0)}</span>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(selectedSnapshot?.netRevenue ?? 0)}</span>
               </div>
 
               <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -405,7 +509,7 @@ export default function Dashboard() {
                   </div>
                   <span className="text-sm text-gray-700 font-medium">Delivery Charges</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.deliveryCharges ?? 0)}</span>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(selectedSnapshot?.deliveryCharges ?? 0)}</span>
               </div>
 
               <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -415,7 +519,7 @@ export default function Dashboard() {
                   </div>
                   <span className="text-sm text-gray-700 font-medium">Packing Charges</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.packingCharges ?? 0)}</span>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(selectedSnapshot?.packingCharges ?? 0)}</span>
               </div>
 
               <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -425,7 +529,7 @@ export default function Dashboard() {
                   </div>
                   <span className="text-sm text-gray-700 font-medium">Platform Fee (₹)</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.platformFee ?? 0)}</span>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(selectedSnapshot?.platformFee ?? 0)}</span>
               </div>
 
               
