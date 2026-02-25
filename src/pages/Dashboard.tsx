@@ -1,264 +1,417 @@
-import DashboardLayout from "../layouts/DashboardLayout";
-import { 
-  Plus, ShoppingCart, TrendingUp, TrendingDown, 
-  MoreVertical, Clock, CheckCircle, AlertCircle, XCircle, Star 
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Plus,
+  ShoppingCart,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  Package,
+  Truck,
+  CreditCard,
 } from "lucide-react";
-import { 
-  AreaChart, Area, XAxis, Tooltip, ResponsiveContainer 
-} from 'recharts';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
-// --- MOCK DATA ---
-const statsData = [
-  { label: "Total Orders", value: "42", change: "+12%", trend: "up", sub: "Vs. 36 yesterday" },
-  { label: "Net Revenue", value: "₹1,240.50", change: "+8%", trend: "up", sub: "Vs. ₹1,148.00 yesterday" },
-  { label: "Avg Order Value", value: "₹29.50", change: "-2%", trend: "down", sub: "Vs. ₹30.10 yesterday" },
-  { label: "Pending Orders", value: "5", change: "0%", trend: "neutral", sub: "Needs attention" },
-];
+import DashboardLayout from "../layouts/DashboardLayout";
+import { analyticsService } from "../services/analyticsService";
+import type { CanteenAnalytics } from "../types/analytics";
 
-const chartData = [
-  { time: '9am', value: 400 },
-  { time: '10am', value: 800 },
-  { time: '11am', value: 500 },
-  { time: '12pm', value: 1000 },
-  { time: '1pm', value: 2000 },
-  { time: '2pm', value: 1800 },
-  { time: '3pm', value: 2600 },
-  { time: '4pm', value: 2200 },
-  { time: '5pm', value: 3400 },
-  { time: '6pm', value: 2800 },
-  { time: '7pm', value: 3800 },
-  { time: '8pm', value: 3500 },
-  { time: '9pm', value: 4000 },
-];
+// --- Utility Functions ---
+const formatCurrency = (value: number) =>
+  `₹${value.toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+  })}`;
 
-const recentOrders = [
-  { id: "#ORD-2458", customer: "Michael S.", items: "2x Pepperoni Pizza, 1x Coke", total: "₹45.50", status: "Cooking", img: "https://i.pravatar.cc/150?u=1" },
-  { id: "#ORD-2457", customer: "Sarah J.", items: "1x Vegan Burger, 1x Fries", total: "₹18.00", status: "Ready", img: "https://i.pravatar.cc/150?u=2" },
-  { id: "#ORD-2456", customer: "David R.", items: "1x Family Combo", total: "₹55.20", status: "Delivered", img: "https://i.pravatar.cc/150?u=3" },
-];
-
-const updates = [
-  { type: "new_order", id: "#202", time: "2m ago", title: "New Order #202", desc: "Order received via App. Total: ₹45.00. 3 Items." },
-  { type: "delivered", id: "#199", time: "15m ago", title: "Order #199 Delivered", desc: "Driver confirmed delivery to 123 Main St." },
-  { type: "stock", id: "stock", time: "32m ago", title: "Low Stock Alert", desc: "Item \"Avocado\" is running low (5 units left)." },
-  { type: "cancelled", id: "#195", time: "1h ago", title: "Order #195 Cancelled", desc: "Customer cancelled due to wait time." },
-  { type: "review", id: "rev", time: "2h ago", title: "New Review", desc: "5 stars received from James K." },
-];
-
-// --- HELPER COMPONENTS ---
-
-const StatusBadge = ({ status }: { status: string }) => {
-  const styles: Record<string, string> = {
-    Cooking: "bg-orange-100 text-orange-700",
-    Ready: "bg-blue-100 text-blue-700",
-    Delivered: "bg-green-100 text-green-700",
-  };
-  return (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${styles[status] || "bg-gray-100 text-gray-700"}`}>
-      {status}
-    </span>
-  );
-};
-
-const UpdateIcon = ({ type }: { type: string }) => {
-  switch (type) {
-    case "new_order": return <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Clock size={18} /></div>;
-    case "delivered": return <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><CheckCircle size={18} /></div>;
-    case "stock": return <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><AlertCircle size={18} /></div>;
-    case "cancelled": return <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><XCircle size={18} /></div>;
-    case "review": return <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600"><Star size={18} /></div>;
-    default: return <div className="w-10 h-10 rounded-full bg-gray-100" />;
-  }
+const formatShortDate = (date: string) => {
+  const d = new Date(date);
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 };
 
 export default function Dashboard() {
+  // Chart Toggle State
+  const [chartMetric, setChartMetric] = useState<"orders" | "revenue">("orders");
+
+  const { data, isLoading } = useQuery<CanteenAnalytics>({
+    queryKey: ["canteen-analytics"],
+    queryFn: analyticsService.getCanteenAnalytics,
+    refetchInterval: 10000, // poll every 10 seconds
+  });
+
+  const today = data?.today;
+  const yesterday = data?.yesterday;
+
+  // Prepare Chart Data
+  const trendData =
+    data?.sevenDayTrend.map((d) => ({
+      date: formatShortDate(d.date),
+      value: chartMetric === "orders" ? d.totalOrders : d.netRevenue,
+    })) ?? [];
+
+  // --- KPI Configuration ---
+  const kpiCards =
+    today && yesterday
+      ? [
+          {
+            label: "Total Orders",
+            value: today.totalOrders.toString(),
+            delta: data?.ordersChangePercent ?? 0,
+            subLabel: `Yesterday: ${yesterday.totalOrders}`,
+          },
+          {
+            label: "Net Revenue",
+            value: formatCurrency(today.netRevenue),
+            delta: data?.revenueChangePercent ?? 0,
+            subLabel: `Yesterday: ${formatCurrency(yesterday.netRevenue)}`,
+          },
+          {
+            label: "Avg Order Value",
+            value: formatCurrency(today.averageOrderValue),
+            delta:
+              today.averageOrderValue && yesterday.averageOrderValue
+                ? ((today.averageOrderValue - yesterday.averageOrderValue) /
+                    Math.max(yesterday.averageOrderValue, 1)) *
+                  100
+                : 0,
+            subLabel: `Yesterday: ${formatCurrency(yesterday.averageOrderValue)}`,
+          },
+          {
+            label: "Completion Rate",
+            value:
+              today.totalOrders > 0
+                ? `${Math.round(
+                    (today.completedOrders / today.totalOrders) * 100
+                  )}%`
+                : "—",
+            delta: 0, // Assuming 0 for now as strict delta wasn't provided
+            subLabel: `Completed: ${today.completedOrders}`,
+          },
+        ]
+      : [];
+
   return (
     <DashboardLayout>
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* --- LEFT MAIN CONTENT (9 Columns) --- */}
-        <div className="lg:col-span-9 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Canteen Overview</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Today vs yesterday KPIs and a 7‑day trend for your outlet.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors">
+            <Plus size={16} /> Add Menu Item
+          </button>
+          <button className="px-4 py-2 bg-blue-900 text-white rounded-lg text-sm font-medium hover:bg-blue-800 flex items-center gap-2 shadow-sm transition-colors">
+            <ShoppingCart size={16} /> Create Order
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* --- LEFT COLUMN (Main Content) --- */}
+        <div className="lg:col-span-8 space-y-6">
           
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-              <p className="text-gray-500 text-sm mt-1">Good morning, Pizza Palace. Here's what's happening today.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                <Plus size={16} /> Add Menu Item
-              </button>
-              <button className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2 shadow-sm shadow-blue-200">
-                <ShoppingCart size={16} /> Create Order
-              </button>
-            </div>
-          </div>
-
-          {/* Stats Cards */}
+          {/* 1. KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {statsData.map((stat, idx) => (
-              <div key={idx} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start mb-2">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{stat.label}</p>
-                  <span className={`flex items-center text-xs font-bold px-2 py-0.5 rounded-full ${
-                    stat.trend === "up" ? "bg-green-100 text-green-700" : 
-                    stat.trend === "down" ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"
-                  }`}>
-                    {stat.trend === "up" ? <TrendingUp size={12} className="mr-1" /> : stat.trend === "down" ? <TrendingDown size={12} className="mr-1" /> : null}
-                    {stat.change}
-                  </span>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900">{stat.value}</h3>
-                <p className="text-xs text-gray-400 mt-1">{stat.sub}</p>
-              </div>
-            ))}
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-white h-32 rounded-xl animate-pulse border border-gray-100" />
+                ))
+              : kpiCards.map((card, idx) => {
+                  const isPositive = card.delta >= 0;
+                  return (
+                    <div key={idx} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        {card.label}
+                      </p>
+                      <div className="flex items-end justify-between mt-2">
+                        <h3 className="text-2xl font-bold text-gray-900">{card.value}</h3>
+                        <span
+                          className={`flex items-center text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                            isPositive
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {isPositive ? (
+                            <TrendingUp size={12} className="mr-1" />
+                          ) : (
+                            <TrendingDown size={12} className="mr-1" />
+                          )}
+                          {Math.abs(card.delta).toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2">{card.subLabel}</p>
+                    </div>
+                  );
+                })}
           </div>
 
-          {/* Chart Section */}
-          <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Daily Sales Performance</h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-2xl font-bold text-gray-900">$1,240.50</span>
-                  <span className="text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded">↑ Today</span>
+          {/* 2. Middle Row: Outcomes & Snapshot */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Order Outcomes */}
+            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-6">
+                Order Outcomes (Today)
+              </h3>
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
+                    <span className="text-sm font-medium text-gray-700">Completed</span>
+                  </div>
+                  <span className="font-bold text-green-600">{today?.completedOrders ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                    <span className="text-sm font-medium text-gray-700">Cancelled</span>
+                  </div>
+                  <span className="font-bold text-amber-600">{today?.cancelledOrders ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                    <span className="text-sm font-medium text-gray-700">Rejected</span>
+                  </div>
+                  <span className="font-bold text-red-600">{today?.rejectedOrders ?? 0}</span>
                 </div>
               </div>
-              <select className="bg-gray-50 border border-gray-200 text-sm rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-100">
-                <option>Today</option>
-                <option>Yesterday</option>
-                <option>Last 7 Days</option>
-              </select>
             </div>
-            
-            <div className="h-[250px] w-full">
+
+            {/* Yesterday Snapshot */}
+            <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                  Yesterday Snapshot
+                </h3>
+                <span className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-medium rounded">
+                  {yesterday ? formatShortDate(yesterday.date) : "—"}
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">Total Orders</p>
+                  <p className="text-xl font-bold text-gray-900">{yesterday?.totalOrders ?? 0}</p>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">Completed</p>
+                  <p className="text-xl font-bold text-gray-900">{yesterday?.completedOrders ?? 0}</p>
+                </div>
+                <div className="col-span-2 bg-blue-50 p-4 rounded-lg flex justify-between items-center">
+                  <p className="text-xs font-medium text-blue-700">Net Revenue</p>
+                  <p className="text-xl font-bold text-blue-700">
+                    {yesterday ? formatCurrency(yesterday.netRevenue) : "—"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. 7-Day Trend Chart */}
+          <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">7-Day Trend</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Daily orders and net revenue, oldest to newest.
+                </p>
+              </div>
+              
+              {/* Chart Toggle */}
+              <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setChartMetric("orders")}
+                  className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    chartMetric === "orders"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  Orders
+                </button>
+                <button
+                  onClick={() => setChartMetric("revenue")}
+                  className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    chartMetric === "revenue"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-900"
+                  }`}
+                >
+                  Revenue
+                </button>
+              </div>
+            </div>
+
+            <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+                <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <linearGradient id="colorChart" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  />
-                  <XAxis 
-                    dataKey="time" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 12, fill: '#9ca3af' }} 
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                    tickLine={false}
+                    axisLine={false}
                     dy={10}
                   />
-                  <Area 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#3b82f6" 
-                    strokeWidth={3} 
-                    fillOpacity={1} 
-                    fill="url(#colorValue)" 
+                  <YAxis
+                    tickFormatter={(v) => chartMetric === "revenue" ? `₹${v}` : `${v}`}
+                    tick={{ fontSize: 11, fill: "#9ca3af" }}
+                    tickLine={false}
+                    axisLine={false}
+                    dx={-10}
+                  />
+                  <Tooltip
+                    contentStyle={{ 
+                      borderRadius: "8px", 
+                      border: "none", 
+                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" 
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#3b82f6"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#colorChart)"
+                    activeDot={{ r: 6, strokeWidth: 0, fill: "#2563eb" }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
+        </div>
 
-          {/* Recent Orders Table */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-lg font-bold text-gray-900">Recent Orders</h2>
-              <a href="#" className="text-sm font-semibold text-blue-600 hover:text-blue-700">View All</a>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                    <th className="px-6 py-4 font-semibold">Order ID</th>
-                    <th className="px-6 py-4 font-semibold">Customer</th>
-                    <th className="px-6 py-4 font-semibold">Items</th>
-                    <th className="px-6 py-4 font-semibold">Total</th>
-                    <th className="px-6 py-4 font-semibold">Status</th>
-                    <th className="px-6 py-4 font-semibold text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {recentOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{order.id}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <img src={order.img} alt="" className="w-8 h-8 rounded-full bg-gray-200" />
-                          <span className="text-sm text-gray-700 font-medium">{order.customer}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate" title={order.items}>
-                        {order.items}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-bold text-gray-900">{order.total}</td>
-                      <td className="px-6 py-4">
-                        <StatusBadge status={order.status} />
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <button className="text-gray-400 hover:text-gray-600">
-                          <MoreVertical size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* --- RIGHT COLUMN (Sidebar) --- */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* 1. Today at a Glance (Blue Card) */}
+          <div className="bg-blue-900 p-6 rounded-xl shadow-md text-white">
+            <h2 className="text-lg font-bold mb-3">Today at a Glance</h2>
+            <p className="text-blue-100 text-sm leading-relaxed mb-6">
+              You've processed <span className="font-bold text-white">{today?.totalOrders ?? 0}</span> orders today 
+              ({(data?.ordersChangePercent ?? 0) >= 0 ? "up" : "down"} {Math.abs(data?.ordersChangePercent ?? 0).toFixed(1)}% vs yesterday) 
+              with a net revenue of <span className="font-bold text-white">{formatCurrency(today?.netRevenue ?? 0)}</span>.
+            </p>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-b border-blue-800 pb-3">
+                <span className="text-xs text-blue-200">Order window</span>
+                <span className="text-sm font-medium">{today ? formatShortDate(today.date) : "-"}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-blue-800 pb-3">
+                <span className="text-xs text-blue-200">Revenue change</span>
+                <span className={`text-sm font-medium ${(data?.revenueChangePercent ?? 0) >= 0 ? "text-green-300" : "text-red-300"}`}>
+                  {(data?.revenueChangePercent ?? 0) > 0 ? "+" : ""}
+                  {data?.revenueChangePercent.toFixed(1)}%
+                </span>
+              </div>
+              <div className="flex justify-between items-center pb-1">
+                <span className="text-xs text-blue-200">Orders change</span>
+                <span className={`text-sm font-medium ${(data?.ordersChangePercent ?? 0) >= 0 ? "text-green-300" : "text-red-300"}`}>
+                   {(data?.ordersChangePercent ?? 0) > 0 ? "+" : ""}
+                   {data?.ordersChangePercent.toFixed(1)}%
+                </span>
+              </div>
             </div>
           </div>
 
-        </div>
-
-        {/* --- RIGHT SIDEBAR (3 Columns) --- */}
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm h-full">
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                </span>
-                <h2 className="text-lg font-bold text-gray-900">Live Updates</h2>
-              </div>
-              <button className="text-xs text-gray-500 hover:text-gray-800">Clear</button>
+          {/* 2. Revenue Quality */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="text-sm font-bold text-gray-900">Revenue Quality</h3>
             </div>
-
-            <div className="space-y-8 relative before:absolute before:left-[19px] before:top-2 before:h-[90%] before:w-[2px] before:bg-gray-100">
-              {updates.map((update, idx) => (
-                <div key={idx} className="relative flex gap-4">
-                  <div className="relative z-10 bg-white">
-                    <UpdateIcon type={update.type} />
+            <div className="divide-y divide-gray-100">
+              <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                    <Wallet size={16} />
                   </div>
-                  <div className="flex-1 pt-1">
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-sm font-semibold text-gray-900">{update.title}</h4>
-                      <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">{update.time}</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                      {update.desc}
-                    </p>
-                    {update.type === "new_order" && (
-                      <div className="flex gap-2 mt-3">
-                        <button className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700">Accept</button>
-                        <button className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-200">Decline</button>
-                      </div>
-                    )}
-                    {update.type === "stock" && (
-                      <button className="mt-2 text-xs font-semibold text-blue-600 hover:underline">
-                        Update Inventory
-                      </button>
-                    )}
+                  <span className="text-sm text-gray-700 font-medium">Gross Revenue</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.totalRevenue ?? 0)}</span>
+              </div>
+
+              <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+                    <Wallet size={16} />
+                  </div>
+                  <div className="flex flex-col">
+                     <span className="text-sm text-gray-700 font-medium">Net Revenue</span>
+                     <span className="text-[10px] text-green-600">Target Reached</span>
                   </div>
                 </div>
-              ))}
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.netRevenue ?? 0)}</span>
+              </div>
+
+              <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                    <Truck size={16} />
+                  </div>
+                  <span className="text-sm text-gray-700 font-medium">Delivery Charges</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.deliveryCharges ?? 0)}</span>
+              </div>
+
+              <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
+                    <Package size={16} />
+                  </div>
+                  <span className="text-sm text-gray-700 font-medium">Packing Charges</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.packingCharges ?? 0)}</span>
+              </div>
+
+              <div className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-gray-100 text-gray-600 rounded-lg">
+                    <CreditCard size={16} />
+                  </div>
+                  <span className="text-sm text-gray-700 font-medium">Platform Fee (₹)</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900">{formatCurrency(today?.platformFee ?? 0)}</span>
+              </div>
+
+              
             </div>
           </div>
         </div>
 
+        {/* Debug Section (Kept as requested) */}
+        {data && (
+          <div className="lg:col-span-12 mt-4">
+             <div className="bg-gray-900 text-green-400 rounded-xl p-4 text-xs overflow-auto max-h-60 font-mono shadow-inner border border-gray-800">
+              <div className="flex gap-2 mb-2">
+                <span className="w-3 h-3 rounded-full bg-red-500"/>
+                <span className="w-3 h-3 rounded-full bg-yellow-500"/>
+                <span className="w-3 h-3 rounded-full bg-green-500"/>
+              </div>
+              <pre className="whitespace-pre-wrap break-words">
+                {JSON.stringify(data, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

@@ -18,7 +18,6 @@ interface OrderCardProps {
 export const OrderCard: React.FC<OrderCardProps> = ({ 
   order, onAccept, onReject, onPrepare, onReady, isProcessing 
 }) => {
-  // ... existing date and icon logic ...
   const timeAgo = order.createdAt 
     ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true }) 
     : 'Just now';
@@ -32,22 +31,91 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     }
   };
 
+  const statusStyles: Record<Order["orderStatus"], { label: string; badge: string; border: string }> = {
+    ORDER_PLACED: {
+      label: "New",
+      badge: "bg-amber-50 text-amber-700 border border-amber-200",
+      border: "border-l-4 border-l-amber-500",
+    },
+    ACCEPTED: {
+      label: "Accepted",
+      badge: "bg-blue-50 text-blue-700 border border-blue-200",
+      border: "border-l-4 border-l-blue-500",
+    },
+    PREPARING: {
+      label: "Preparing",
+      badge: "bg-purple-50 text-purple-700 border border-purple-200",
+      border: "border-l-4 border-l-purple-500",
+    },
+    READY: {
+      label: "Ready",
+      badge: "bg-green-50 text-green-700 border border-green-200",
+      border: "border-l-4 border-l-green-500",
+    },
+    COMPLETED: {
+      label: "Completed",
+      badge: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+      border: "border-l-4 border-l-emerald-500",
+    },
+    REJECTED: {
+      label: "Rejected",
+      badge: "bg-red-50 text-red-700 border border-red-200",
+      border: "border-l-4 border-l-red-500",
+    },
+    CANCELLED: {
+      label: "Cancelled",
+      badge: "bg-gray-50 text-gray-600 border border-gray-200",
+      border: "border-l-4 border-l-gray-400",
+    },
+    EXPIRED: {
+      label: "Expired",
+      badge: "bg-gray-50 text-gray-500 border border-gray-200",
+      border: "border-l-4 border-l-gray-300",
+    },
+  };
+
+  const currentStatus = statusStyles[order.orderStatus];
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col h-full overflow-hidden">
+    <div
+      className={`bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col h-full overflow-hidden ${currentStatus.border}`}
+    >
       
-      {/* ... Header and Customer Info (Same as before) ... */}
-      <div className="bg-gray-50 px-4 py-3 flex justify-between items-center border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-gray-900">#{order.orderId}</span>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${
-            order.paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-          }`}>
-            {order.paymentStatus}
-          </span>
+      {/* Header */}
+      <div className="bg-gray-50 px-4 py-3 flex justify-between items-start border-b border-gray-100">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-900">#{order.orderId}</span>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${
+                order.paymentStatus === "PAID"
+                  ? "bg-green-100 text-green-700"
+                  : "bg-yellow-100 text-yellow-700"
+              }`}
+            >
+              {order.paymentStatus}
+            </span>
+          </div>
+          <div className="inline-flex items-center gap-1.5 text-[11px] text-gray-600">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${currentStatus.badge}`}
+            >
+              {currentStatus.label}
+            </span>
+            <span className="text-gray-300">•</span>
+            <span className="capitalize text-gray-500">
+              {order.fulfilmentType.toLowerCase().replace("_", " ")}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center text-xs text-gray-500 gap-1.5">
-          <Clock size={12} />
-          {timeAgo}
+        <div className="flex flex-col items-end text-xs text-gray-500 gap-1">
+          <div className="flex items-center gap-1.5">
+            <Clock size={12} />
+            <span>{timeAgo}</span>
+          </div>
+          <span className="text-[11px] text-gray-400">
+            Order ID: {order.orderId}
+          </span>
         </div>
       </div>
 
@@ -55,16 +123,16 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
           <User size={16} />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1">
           <p className="text-sm font-semibold text-gray-900 truncate">
             {order.customerName || "Guest Customer"}
           </p>
-          <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
             <span className="flex items-center gap-1">
               <Phone size={10} /> {order.customerPhone}
             </span>
-            <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-            <span className="flex items-center gap-1 font-medium text-gray-700 bg-gray-100 px-1.5 rounded">
+            <span className="w-1 h-1 bg-gray-300 rounded-full" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 font-medium">
               {getFulfilmentIcon()} {order.fulfilmentType}
             </span>
           </div>

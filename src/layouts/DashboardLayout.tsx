@@ -1,15 +1,20 @@
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
-import { Store, Bell, Settings, Search } from "lucide-react";
+import { Utensils, Search } from "lucide-react";
 import { PrintManager } from "../features/print/PrintManager";
+import { authService } from "../services/authService";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const { data: profile } = useQuery({
+    queryKey: ["vendor-profile"],
+    queryFn: authService.getMe,
+  });
   const navItems = [
     { name: "Dashboard", path: "/dashboard" },
     { name: "Orders", path: "/orders" },
     { name: "Menu", path: "/menu" },
-    { name: "Reports", path: "/reports" },
   ];
 
   return (
@@ -21,8 +26,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Logo & Search */}
           <div className="flex items-center gap-8 flex-1">
             <Link to="/dashboard" className="flex items-center gap-2 text-blue-600 font-bold text-lg">
-              <Store className="w-6 h-6" />
-              <span className="text-gray-900">Vendor Portal</span>
+              <Utensils className="w-6 h-6" />
+              <span className="text-gray-900">
+                {profile?.outletName || "Vendor Portal"}
+              </span>
             </Link>
             
             <div className="relative w-full max-w-md hidden md:block">
@@ -52,24 +59,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ))}
           </nav>
 
-          {/* Actions & Profile */}
+          {/* Actions */}
           <div className="flex items-center gap-3">
-            {/* Print pending orders */}
             <PrintManager />
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-            </button>
-            <button className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors">
-              <Settings className="w-5 h-5" />
-            </button>
-            <div className="w-9 h-9 bg-gray-200 rounded-full overflow-hidden border border-gray-200 ml-2">
-              <img 
-                src="https://images.unsplash.com/photo-1556157382-97eda2d62296?q=80&w=2070&auto=format&fit=crop" 
-                alt="Profile" 
-                className="w-full h-full object-cover"
-              />
-            </div>
           </div>
         </div>
       </header>
