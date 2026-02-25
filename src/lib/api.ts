@@ -3,7 +3,7 @@ import axios from "axios";
 // Use a relative base URL so that:
 // - In production, the frontend and backend share the same origin (`/api/...`)
 // - In development, Vite proxies `/api` to the configured backend target
-const API_BASE_URL = "/api";
+const API_BASE_URL = "https://api.expertsec.in/api";
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
