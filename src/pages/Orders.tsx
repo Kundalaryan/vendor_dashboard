@@ -9,10 +9,10 @@ import type { OrderStatus } from "../types/order";
 
 export default function Orders() {
   const queryClient = useQueryClient();
-  
+
   // Default to the first stage of your cycle
   const [activeTab, setActiveTab] = useState<OrderStatus>("ORDER_PLACED");
-  
+
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
@@ -20,17 +20,25 @@ export default function Orders() {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: orderService.getOrders,
-    refetchInterval: 5000, 
+    refetchInterval: 5000,
   });
 
   // 2. Mutations
   const acceptMutation = useMutation({
     mutationFn: (id: number) => orderService.acceptOrder(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders"] }),
+    onSuccess: () => {
+      // 1. Refresh Orders List
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+
+      // 2. NEW: Immediately check for prints
+      // This forces PrintManager to fetch new data. 
+      // If backend added it to the print queue, PrintManager will see it and auto-print.
+      queryClient.invalidateQueries({ queryKey: ["pending-prints"] });
+    },
   });
 
   const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: number; reason: string }) => 
+    mutationFn: ({ id, reason }: { id: number; reason: string }) =>
       orderService.rejectOrder(id, { reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
@@ -62,25 +70,25 @@ export default function Orders() {
 
   // 3. Define Tabs based on your cycle
   const tabs: { label: string; value: OrderStatus; count: number }[] = [
-    { 
-      label: "New Orders", 
-      value: "ORDER_PLACED", 
-      count: visibleOrders.filter(o => o.orderStatus === "ORDER_PLACED").length 
+    {
+      label: "New Orders",
+      value: "ORDER_PLACED",
+      count: visibleOrders.filter(o => o.orderStatus === "ORDER_PLACED").length
     },
-    { 
-      label: "Accepted", 
-      value: "ACCEPTED", 
-      count: visibleOrders.filter(o => o.orderStatus === "ACCEPTED").length 
+    {
+      label: "Accepted",
+      value: "ACCEPTED",
+      count: visibleOrders.filter(o => o.orderStatus === "ACCEPTED").length
     },
-    { 
-      label: "Preparing", 
-      value: "PREPARING", 
-      count: visibleOrders.filter(o => o.orderStatus === "PREPARING").length 
+    {
+      label: "Preparing",
+      value: "PREPARING",
+      count: visibleOrders.filter(o => o.orderStatus === "PREPARING").length
     },
-    { 
-      label: "Ready", 
-      value: "READY", 
-      count: visibleOrders.filter(o => o.orderStatus === "READY").length 
+    {
+      label: "Ready",
+      value: "READY",
+      count: visibleOrders.filter(o => o.orderStatus === "READY").length
     },
   ];
 
@@ -96,7 +104,7 @@ export default function Orders() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-100px)]">
-        
+
         {/* Header Control */}
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
           <div>
@@ -114,17 +122,15 @@ export default function Orders() {
               <button
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
-                className={`pb-3 pt-2 px-2 text-sm font-medium whitespace-nowrap transition-all border-b-2 flex items-center gap-2 ${
-                  activeTab === tab.value
+                className={`pb-3 pt-2 px-2 text-sm font-medium whitespace-nowrap transition-all border-b-2 flex items-center gap-2 ${activeTab === tab.value
                     ? "border-blue-600 text-blue-600"
                     : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
+                  }`}
               >
                 {tab.label}
                 {tab.count > 0 && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                    activeTab === tab.value ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
-                  }`}>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${activeTab === tab.value ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
+                    }`}>
                     {tab.count}
                   </span>
                 )}
@@ -177,7 +183,7 @@ export default function Orders() {
           <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-200">
             <h3 className="text-lg font-bold text-gray-900 mb-2">Reject Order #{rejectId}</h3>
             <p className="text-sm text-gray-500 mb-4">Please specify a reason for rejection. This will be sent to the customer.</p>
-            
+
             <textarea
               className="w-full border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-red-100 focus:border-red-500 outline-none resize-none h-24"
               placeholder="e.g. Item out of stock..."
@@ -187,13 +193,13 @@ export default function Orders() {
             />
 
             <div className="flex gap-3 mt-6">
-              <button 
+              <button
                 onClick={() => setRejectId(null)}
                 className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleRejectSubmit}
                 disabled={!rejectReason}
                 className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors shadow-sm shadow-red-200"

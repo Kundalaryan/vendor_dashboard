@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useReactToPrint } from "react-to-print";
 import { Printer, Loader2, AlertTriangle, Zap } from "lucide-react";
@@ -9,114 +9,137 @@ export const PrintManager = () => {
   const queryClient = useQueryClient();
   const componentRef = useRef<HTMLDivElement>(null);
   
-  // Load "Auto-Complete" setting from local storage
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+
+  // Load "Zap Mode" setting
   const [autoComplete, setAutoComplete] = useState(() => {
     return localStorage.getItem("print_auto_complete") === "true";
   });
 
-  const [showConfirmation, setShowConfirmation] = useState(false);
-
-  // 1. Toggle Auto-Complete
+  // Toggle Zap Mode
   const toggleAutoComplete = () => {
     const newValue = !autoComplete;
     setAutoComplete(newValue);
     localStorage.setItem("print_auto_complete", String(newValue));
   };
 
-  // 2. Poll for Pending Prints (Every 10 seconds)
+  // Poll for Pending Prints (Every 10 seconds)
   const { data: pendingOrders = [] } = useQuery({
     queryKey: ["pending-prints"],
     queryFn: printService.getPendingPrints,
     refetchInterval: 10000, 
   });
 
-  // 3. Mutation to mark complete
+  // Mark Complete Mutation
   const completeMutation = useMutation({
     mutationFn: async (orderIds: number[]) => {
-      // Parallel execution is faster
       await Promise.all(orderIds.map(id => printService.markPrintComplete(id)));
     },
     onSuccess: () => {
-      // Optimistic update: Clear list immediately
       queryClient.setQueryData(["pending-prints"], []); 
       queryClient.invalidateQueries({ queryKey: ["pending-prints"] });
       setShowConfirmation(false);
+      setIsPrinting(false);
+    },
+    onError: () => {
+      setIsPrinting(false);
     }
   });
 
-  // 4. Print Handler
+  // Print Handler
   const handlePrint = useReactToPrint({
-    contentRef: componentRef, 
+    contentRef: componentRef,
     documentTitle: "Vendor_Receipts",
     onAfterPrint: () => {
-      // IF Auto-Complete is ON, we assume success immediately
       if (autoComplete) {
         if (pendingOrders.length > 0) {
           const ids = pendingOrders.map(o => o.orderId);
           completeMutation.mutate(ids);
+        } else {
+          setIsPrinting(false);
         }
       } else {
-        // ELSE, ask for confirmation
         setShowConfirmation(true);
+        setIsPrinting(false);
       }
     }
   });
 
-  // If no orders to print AND we are not confirming, hide everything
-  if (pendingOrders.length === 0 && !showConfirmation) {
-    return null;
-  }
+  // --- AUTOMATION LOGIC ---
+  useEffect(() => {
+    if (autoComplete && pendingOrders.length > 0 && !isPrinting) {
+      setIsPrinting(true); 
+      setTimeout(() => {
+        handlePrint();
+      }, 500);
+    }
+  }, [pendingOrders, autoComplete, isPrinting, handlePrint]);
+
+  const hasOrders = pendingOrders.length > 0;
+  const isLoading = completeMutation.isPending || isPrinting;
 
   return (
     <>
-      {/* --- BUTTONS IN NAVBAR --- */}
-      {pendingOrders.length > 0 && !showConfirmation && (
-        <div className="flex items-center gap-2 mr-4 bg-white p-1 rounded-lg border border-gray-200 shadow-sm">
+      {/* --- PERMANENT HEADER TOOLBAR --- */}
+      <div className="flex items-center gap-1 mr-4 bg-white p-1 rounded-lg border border-gray-200 shadow-sm h-9">
+        
+        {/* 1. Zap Toggle (Always Visible & Interactive) */}
+        <button 
+          onClick={toggleAutoComplete}
+          title={autoComplete ? "Zap Mode ON: Auto-print enabled" : "Zap Mode OFF: Manual print"}
+          className={`p-1.5 rounded-md transition-all duration-200 ${
+            autoComplete 
+              ? "text-green-600 bg-green-50 hover:bg-green-100" 
+              : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          <Zap size={18} fill={autoComplete ? "currentColor" : "none"} />
+        </button>
+
+        {/* Separator */}
+        <div className="w-px h-4 bg-gray-200 mx-1"></div>
+
+        {/* 2. Print Button (Visible but changes state) */}
+        <button 
+          onClick={() => { setIsPrinting(true); handlePrint(); }}
+          disabled={!hasOrders || isLoading}
+          className={`flex items-center gap-2 px-3 py-1 text-xs font-medium rounded-md transition-all ${
+            hasOrders 
+              ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm animate-pulse cursor-pointer" 
+              : "bg-gray-50 text-gray-400 cursor-not-allowed"
+          }`}
+        >
+          {isLoading ? (
+            <Loader2 className="animate-spin" size={14} />
+          ) : (
+            <Printer size={14} />
+          )}
           
-          {/* Settings Toggle (Small Icon) */}
-          <button 
-            onClick={toggleAutoComplete}
-            title={autoComplete ? "Auto-Complete ON: Printing will instantly mark orders as done" : "Auto-Complete OFF: You will be asked to confirm printing"}
-            className={`p-2 rounded-md transition-colors ${
-              autoComplete ? "text-green-600 bg-green-50" : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
-            }`}
-          >
-            <Zap size={18} fill={autoComplete ? "currentColor" : "none"} />
-          </button>
+          <span className="whitespace-nowrap">
+            {hasOrders ? `Print (${pendingOrders.length})` : "No Prints"}
+          </span>
+        </button>
+      </div>
 
-          <button 
-            onClick={() => handlePrint()}
-            disabled={completeMutation.isPending}
-            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md shadow-sm animate-pulse transition-all"
-          >
-            {completeMutation.isPending ? <Loader2 className="animate-spin" size={16} /> : <Printer size={16} />}
-            <span>Print Pending ({pendingOrders.length})</span>
-          </button>
-        </div>
-      )}
-
-      {/* --- HIDDEN RECEIPT COMPONENT --- */}
-      {/* This renders ALL pending orders in one go */}
+      {/* Hidden Receipt Component */}
       <div style={{ display: "none" }}>
         <ReceiptBatch ref={componentRef} orders={pendingOrders} />
       </div>
 
-      {/* --- CONFIRMATION MODAL (Only shows if Auto-Complete is OFF) --- */}
+      {/* Confirmation Modal */}
       {showConfirmation && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100">
+           <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-gray-100">
              <div className="flex flex-col items-center text-center">
                 <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600 mb-4">
                   <AlertTriangle size={24} />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">Did the receipts print?</h3>
-                <p className="text-sm text-gray-500 mt-2 mb-6">
-                  Confirming will remove these orders from the print queue.
-                </p>
-                <div className="flex gap-3 w-full">
+                <div className="flex gap-3 w-full mt-6">
                    <button 
                      onClick={() => setShowConfirmation(false)} 
-                     className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 text-gray-700 font-medium"
+                     className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50 font-medium text-sm"
                    >
                      No, Retry
                    </button>
@@ -125,9 +148,9 @@ export const PrintManager = () => {
                        const ids = pendingOrders.map(o => o.orderId);
                        completeMutation.mutate(ids);
                      }} 
-                     className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-sm"
+                     className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium text-sm"
                    >
-                     Yes, Printed
+                     Yes
                    </button>
                 </div>
              </div>
