@@ -312,6 +312,13 @@ export default function Dashboard() {
                       border: "none", 
                       boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" 
                     }}
+                    formatter={(val: number | string | undefined) => {
+                      const numericValue = Number(val ?? 0);
+                      if (chartMetric === "revenue") {
+                        return [`₹${numericValue.toLocaleString("en-IN")}`, "Revenue"];
+                      }
+                      return [numericValue.toLocaleString("en-IN"), "Orders"];
+                    }}
                   />
                   <Area
                     type="monotone"
