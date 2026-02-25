@@ -14,7 +14,7 @@ export interface PrintOrder {
   vendorAddress: string; // "North Block IIT Jammu"
   customerName: string | null;
   customerPhone: string;
-  customerAddress: string | null; // "Egret hostel"
+  customerAddress: string | null;
   fulfilmentType: string;
   instructions: string | null;
   items: PrintOrderItem[];
