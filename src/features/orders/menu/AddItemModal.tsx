@@ -100,7 +100,7 @@ export const AddItemModal: React.FC<AddItemModalProps> = ({
                   step="0.01"
                   className="w-full pl-7 pr-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-50 focus:border-blue-500 transition-all text-sm"
                   placeholder="0.00"
-                  {...register("price")}
+                  {...register("price", { valueAsNumber: true })}
                 />
               </div>
               {errors.price && <p className="text-xs text-red-500 mt-1">{errors.price.message}</p>}

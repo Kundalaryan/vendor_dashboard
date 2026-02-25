@@ -121,7 +121,7 @@ export const UpdateItemModal: React.FC<UpdateItemModalProps> = ({
                 type="number"
                 step="0.01"
                 className="w-full px-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-50 focus:border-blue-500 transition-all text-sm"
-                {...register("price")}
+                {...register("price", { valueAsNumber: true })}
               />
               {errors.price && <p className="text-xs text-red-500 mt-1">{errors.price.message}</p>}
             </div>

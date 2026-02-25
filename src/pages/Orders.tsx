@@ -15,7 +15,6 @@ export default function Orders() {
   
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-  const [isAccepting, setIsAccepting] = useState(true);
 
   // 1. Fetch
   const { data: orders = [], isLoading } = useQuery({
@@ -56,10 +55,6 @@ export default function Orders() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
   });
-  const availabilityMutation = useMutation({
-    mutationFn: (active: boolean) => orderService.updateAvailability(active),
-  });
-
   // Only show orders that are paid and not expired
   const visibleOrders = orders.filter(
     (o) => o.paymentStatus === "PAID" && o.orderStatus !== "EXPIRED"
@@ -107,29 +102,8 @@ export default function Orders() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-gray-900">Live Orders</h1>
-              <div className={`px-2.5 py-0.5 rounded text-xs font-bold tracking-wide uppercase ${isAccepting ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                {isAccepting ? "Store Open" : "Store Closed"}
-              </div>
             </div>
             <p className="text-gray-500 text-sm mt-1">Manage incoming orders and track their status.</p>
-          </div>
-
-          {/* Availability Toggle */}
-          <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
-            <span className="text-sm font-medium text-gray-700">Accepting Orders</span>
-            <button 
-              onClick={() => {
-                setIsAccepting(!isAccepting);
-                availabilityMutation.mutate(!isAccepting);
-              }}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                isAccepting ? "bg-green-500" : "bg-gray-300"
-              }`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                isAccepting ? "translate-x-6" : "translate-x-1"
-              }`} />
-            </button>
           </div>
         </div>
 
