@@ -31,6 +31,9 @@ export interface VendorProfile {
   phone: string;
   serviceType: string;
   outletName: string | null;
+  outletImageUrl?: string | null;
+  outletImage?: string | null;
+  imageUrl?: string | null;
   address: string | null;
   openingTime: string | null;
   closingTime: string | null;

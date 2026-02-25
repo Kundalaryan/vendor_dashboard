@@ -14,6 +14,17 @@ export const authService = {
     const response = await api.get<VendorProfile>('/vendor/me');
     return response.data;
   },
+  uploadOutletImage: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await api.post("/vendor/me/image", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
 
   // 2. Complete Onboarding
   completeOnboarding: async (data: OnboardingRequest) => {

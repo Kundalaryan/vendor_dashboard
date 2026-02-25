@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useReactToPrint } from "react-to-print";
-import { Printer, Loader2, CheckCircle, XCircle, AlertTriangle, Zap } from "lucide-react";
+import { Printer, Loader2, AlertTriangle, Zap } from "lucide-react";
 import { printService } from "../../services/printService";
 import { ReceiptBatch } from "../../components/Receipt";
 
