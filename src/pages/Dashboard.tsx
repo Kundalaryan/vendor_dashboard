@@ -67,7 +67,8 @@ export default function Dashboard() {
   const { data, isLoading } = useQuery<CanteenAnalytics>({
     queryKey: ["canteen-analytics"],
     queryFn: analyticsService.getCanteenAnalytics,
-    refetchInterval: 10000, // poll every 10 seconds
+    refetchInterval: 60000, // poll every 60 seconds
+    staleTime: 10000, // consider data fresh for 10 seconds
   });
   const availabilityMutation = useMutation({
     mutationFn: (active: boolean) => orderService.updateAvailability(active),
@@ -77,6 +78,7 @@ export default function Dashboard() {
   const yesterday = data?.yesterday;
   const todayDate = toLocalDateInput(new Date());
   const minLocalSelectableDate = toLocalDateInput(
+    // eslint-disable-next-line react-hooks/purity
     new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
   );
   const lastSevenDays = data?.sevenDayTrend
