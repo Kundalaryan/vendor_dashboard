@@ -226,6 +226,10 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
             <span className="text-sm font-medium text-gray-700">Accepting Orders</span>
             <button
+              role="switch"
+              aria-checked={isAccepting}
+              aria-label="Accepting Orders"
+              aria-busy={availabilityMutation.isPending}
               onClick={() => {
                 const nextState = !isAccepting;
                 setIsAccepting(nextState);
@@ -236,9 +240,9 @@ export default function Dashboard() {
                 });
               }}
               disabled={availabilityMutation.isPending}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 ${
                 isAccepting ? "bg-green-500" : "bg-gray-300"
-              } ${availabilityMutation.isPending ? "opacity-70 cursor-not-allowed" : ""}`}
+              } ${availabilityMutation.isPending ? "opacity-70 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
