@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Search, Plus, Filter, 
@@ -85,8 +85,11 @@ export default function Menu() {
   });
 
   // Client-side search filtering
-  const filteredItems = menuItems.filter(item => 
-    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredItems = useMemo(() =>
+    menuItems.filter(item =>
+      item.name.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [menuItems, searchQuery]
   );
 
   return (
