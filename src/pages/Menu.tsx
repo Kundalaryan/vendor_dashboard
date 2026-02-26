@@ -5,6 +5,7 @@ import {
   Leaf, UtensilsCrossed, Edit3, Trash2 
 } from "lucide-react";
 
+import { useToast } from "../context/ToastContext";
 import DashboardLayout from "../layouts/DashboardLayout";
 import { menuService } from "../services/menuService";
 import type { MenuItem } from "../types/menu";
@@ -18,6 +19,7 @@ const CATEGORIES = ["All", "Snacks", "Beverages", "Desserts", "Mains"];
 
 export default function Menu() {
   const queryClient = useQueryClient();
+  const { addToast } = useToast();
   
   // Local State for Filters
   const [selectedSection, setSelectedSection] = useState("ALL"); // Default to All Sections
@@ -33,6 +35,7 @@ export default function Menu() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["menu"] });
       setEditingItem(null); // Close modal
+      addToast("Item updated successfully", "success");
     },
   });
 
@@ -81,6 +84,7 @@ export default function Menu() {
       queryClient.invalidateQueries({ queryKey: ["menu"] });
       setIsModalOpen(false); // Close modal on success
       // Optional: Add toast notification here
+      addToast("Item added successfully", "success");
     },
   });
 
