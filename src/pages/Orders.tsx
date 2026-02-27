@@ -165,6 +165,8 @@ export default function Orders() {
                     preparingMutation.isPending ||
                     readyMutation.isPending
                   }
+                  isAccepting={acceptMutation.isPending && acceptMutation.variables === order.orderId}
+                  isRejecting={rejectMutation.isPending && rejectId === order.orderId}
                   onAccept={(id) => acceptMutation.mutate(id)}
                   onReject={(id) => setRejectId(id)}
                   onPrepare={(id) => preparingMutation.mutate(id)}
