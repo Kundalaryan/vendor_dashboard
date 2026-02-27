@@ -13,10 +13,12 @@ interface OrderCardProps {
   onPrepare?: (id: number) => void;
   onReady?: (id: number) => void;
   isProcessing: boolean;
+  isAccepting?: boolean;
+  isRejecting?: boolean;
 }
 
 export const OrderCard: React.FC<OrderCardProps> = ({ 
-  order, onAccept, onReject, onPrepare, onReady, isProcessing 
+  order, onAccept, onReject, onPrepare, onReady, isProcessing, isAccepting, isRejecting
 }) => {
   const timeAgo = order.createdAt 
     ? formatDistanceToNow(new Date(order.createdAt), { addSuffix: true }) 
@@ -176,14 +178,14 @@ export const OrderCard: React.FC<OrderCardProps> = ({
               disabled={isProcessing}
               className="flex items-center justify-center gap-2 px-3 py-2.5 border border-red-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-all disabled:opacity-50"
             >
-              <X size={16} /> Reject
+              {isRejecting ? <Loader2 className="animate-spin" size={16} /> : <X size={16} />} Reject
             </button>
             <button
               onClick={() => onAccept(order.orderId)}
               disabled={isProcessing}
               className="flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm shadow-blue-200 transition-all disabled:opacity-50"
             >
-              {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />} 
+              {isAccepting ? <Loader2 className="animate-spin" size={16} /> : <Check size={16} />}
               Accept
             </button>
           </div>
