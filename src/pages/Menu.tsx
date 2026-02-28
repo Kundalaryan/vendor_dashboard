@@ -232,8 +232,11 @@ export default function Menu() {
                       {/* Available Toggle */}
                       <td className="px-6 py-4 text-center">
                         <button
+                          role="switch"
+                          aria-checked={item.active}
+                          aria-label={`Toggle availability for ${item.name}`}
                           onClick={() => toggleMutation.mutate({ id: item.id, active: !item.active })}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                             item.active ? "bg-blue-600" : "bg-gray-200"
                           }`}
                         >
